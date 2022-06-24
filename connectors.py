@@ -1,9 +1,6 @@
-from hologram import T
 import requests
 import mysql.connector
-import json
 import time
-import pandas as pd
 
 class MySqlDbConnector:
     def __init__(self,
