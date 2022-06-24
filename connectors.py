@@ -1,13 +1,15 @@
+from h11 import Data
 import requests
 import mysql.connector
 import time
 
 class MySqlDbConnector:
     def __init__(self,
+                 username='root', 
+                 password='p@ssw0rd1',
                  host='localhost', 
                  port=3306,
-                 username='root', 
-                 password='p@ssw0rd1'):
+):
         self._host = host
         self._port = port
         self._username = username
@@ -139,32 +141,47 @@ class MySqlDbConnector:
 
         return id
 
-    def initialise_db_and_create_tables(self):
+    def initialise_db_and_create_tables(self, drop_if_exists=False):
+        if drop_if_exists:
+            print('dropping existing database and associated tables & users!')
+            self.run_query(query='DROP TABLE IF EXISTS users_raw', close_conn_after_exec=True)
+            self.run_query(query='DROP TABLE IF EXISTS subscriptions_raw', close_conn_after_exec=True)
+            self.run_query(query='DROP TABLE IF EXISTS messages_raw', close_conn_after_exec=True)
+            self.run_query(query='DROP TABLE IF EXISTS sensitive_zipcode_ids', close_conn_after_exec=True)
+            self.run_query(query='DROP TABLE IF EXISTS sensitive_city_ids', close_conn_after_exec=True)
+            self.run_query(query='DROP TABLE IF EXISTS sensitive_profession_ids', close_conn_after_exec=True)
+            self.run_query(query='DROP TABLE IF EXISTS spark_dwh', close_conn_after_exec=True)
+            self.run_query(query='DROP USER IF EXISTS analyst', close_conn_after_exec=True)
+            self.run_query(query='DROP DATABASE IF EXISTS spark_dwh', database=None, close_conn_after_exec=True)
+
+        if not self._username == 'root':
+            print('DB initialisation can be done only as root user!')
+            return False
         
         self._initialise_db_connection()
         self.run_query(query='CREATE DATABASE IF NOT EXISTS spark_dwh', close_conn_after_exec=True)
 
-        self.run_query(query="""CREATE TABLE IF NOT EXISTS users
-                        (created_at timestamp, updated_at timestamp, 
-                        city_id INT, country VARCHAR(255), zipcode_id INT, 
-                        email VARCHAR(255), birth_date timestamp,
-                        gender VARCHAR(10), is_smoking BOOLEAN, profession_id INT,
-                        income FLOAT)""", database='spark_dwh', close_conn_after_exec=True
+        self.run_query(query="""CREATE TABLE IF NOT EXISTS users_raw
+                        (user_id VARCHAR(255), created_at VARCHAR(255), updated_at VARCHAR(255), 
+                        city_id VARCHAR(255), country VARCHAR(255), zipcode_id VARCHAR(255), 
+                        email VARCHAR(255), birth_date VARCHAR(255),
+                        gender VARCHAR(10), is_smoking VARCHAR(255), profession_id VARCHAR(255),
+                        income VARCHAR(255))""", database='spark_dwh', close_conn_after_exec=True
         )
 
-        self.run_query(query="""CREATE TABLE IF NOT EXISTS subscriptions
-                        (created_at timestamp, start_date timestamp,
-                        end_date timestamp, status VARCHAR(255),
-                        amount FLOAT)""", database='spark_dwh', close_conn_after_exec=True
+        self.run_query(query="""CREATE TABLE IF NOT EXISTS subscriptions_raw
+                        (created_at VARCHAR(255), start_date VARCHAR(255),
+                        end_date VARCHAR(255), status VARCHAR(255),
+                        amount VARCHAR(255))""", database='spark_dwh', close_conn_after_exec=True
         )
         
-        self.run_query(query="""CREATE TABLE IF NOT EXISTS messages
-                        (created_at timestamp, receiver_id INT, 
-                        id INT, sender_id INT)""", database='spark_dwh', close_conn_after_exec=True
+        self.run_query(query="""CREATE TABLE IF NOT EXISTS messages_raw
+                        (created_at VARCHAR(255), receiver_id VARCHAR(255), 
+                        id VARCHAR(255), sender_id VARCHAR(255))""", database='spark_dwh', close_conn_after_exec=True
         )
 
         self.run_query(query="""CREATE TABLE IF NOT EXISTS sensitive_zipcode_ids
-                        (id INT AUTO_INCREMENT, zipcode INT, PRIMARY KEY (id))""", 
+                        (id INT AUTO_INCREMENT, zipcode VARCHAR(255), PRIMARY KEY (id))""", 
                         database='spark_dwh', close_conn_after_exec=True
         )
 
@@ -177,15 +194,21 @@ class MySqlDbConnector:
                         (id INT AUTO_INCREMENT, profession VARCHAR(255), PRIMARY KEY (id))""", 
                         database='spark_dwh', close_conn_after_exec=True
         )
-        # self._db_conn.commit()
+        
+        self.run_query(query="""CREATE USER IF NOT EXISTS 'analyst' IDENTIFIED BY 'password'""")
+        self.run_query(query="""GRANT ALL PRIVILEGES ON spark_dwh.users_raw to 'analyst'""")
+        self.run_query(query="""GRANT ALL PRIVILEGES ON spark_dwh.subscriptions_raw to 'analyst'""")
+        self.run_query(query="""GRANT ALL PRIVILEGES ON spark_dwh.messages_raw to 'analyst'""")
+
+        
         self._close_db_connection()
 
         print('database initialized!')
+        return True
 
 
     
     def insert_record(self, table_name, record, fail_if_exists=True, database='spark_dwh'):
-        self._initialise_db_connection()
         if fail_if_exists:
             # check if record exists:
             _, result = self.fetch_records(table_name=table_name, 
@@ -248,9 +271,9 @@ class SparkApiConnector:
         
 
 if __name__ == '__main__':
-    
-    connector = MySqlDbConnector()
-    new_record = {'zipcode': '2'}
+    ROOT_PASSWORD = 'p@ssw0rd1'
+    ANALYST_PASSWORD = 'password'
+    connector = MySqlDbConnector(username='root', password=ROOT_PASSWORD)
 
     connector.initialise_db_and_create_tables()
 
