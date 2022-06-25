@@ -1,12 +1,12 @@
 # spark-take-home solution
 This project creates a data pipeline that 
- - Fetches data regarding users and messages from the API end points specified in the task instructions
+ - Fetches data regarding users, subscriptions and messages from the API end points specified in the task instructions
  - Sanitises the data to remove PII information
  - Ingests the data to a MySQL database.
  - Creates some views for monitoring data anomalies inside the database
 
 ## Running the entire pipeline
-The project and the ETL script can be run using the following command:
+The ETL script can be run using the following command:
   _"**docker compose run app**"_
   
 Once the above command is run, docker will initialise a MySQL service, and also execute the  etl.py script. The etl.py script will initialise a database by the name 'spark_dwh' within the MySQL server, then create appropriate tables and user accounts (details described below), and loads the data into the tables (PII is handled as well). Until the container is stopped, the database can be accessed at the address **localhost:3306** using the following credentials - **username: 'analyst', password: 'password'**. Note that the above credentials do not give access to any of the sensitive data tables! (This is part of protecting the PII data process and is explained in detail below). A detailed description of the pipeline and the associated components are given below!
@@ -48,7 +48,7 @@ This connector object fetches the users and messages data from the corresponding
 This is the most important step in the entire data flow process. The process of handling PII data is explained in detail in the following steps:
 
 ### PII data handling - broad idea and architecture
-Certain direct PII informatino such as first name, last name and address of the users are removed from the incoming user data from API right away, as these do not help in any meaningful analytics downstream. However, as mentioned in the task description, the product owners would like to conduct analyses based on (but not limited to) city, email domain and profession. Hence these fields will not be removed, but masked. This is described below
+Certain direct PII information such as first name, last name and address of the users are removed from the incoming user data from API right away, as these do not help in any meaningful analytics downstream. However, as mentioned in the task description, the product owners would like to conduct analyses based on (but not limited to) city, email domain and profession. Hence these fields will not be removed, but masked. This is described below
 
 ### Masking of PII data fields city, zipcode, & profession
 The masking is achieved by generating an 'id' value corresponding to each unique value for city / zipcode / profession. These id values and the corresponding actual values are stored in the tables with prefixes 'sensitive_' as mentioned in the section above on "Initial setup of database and tables". 
@@ -74,10 +74,10 @@ As specified in the task description the file sql_queries/sql_test.sql has queri
 Following are my comments regarding each of the questions
 1. How many total messages are being sent everyday  - For each calendar date, the total messages sent are calculated
 2. Are there any users that did not receive any messages - Yes, user_id 4 has not received any messages
-3. How many active subscriptsion do we have today - 3. The assumption I have made is the subscription status should be 'active' and the subscription end_date should be in the future. It is seen that one of the subscription associated with user_id 3 does not satifsy the second condition - it has an end date in 2022-03-03 but is still shown as active. This is considered as a wrong / noisy data and hence excluded
+3. How many active subscriptions do we have today - 3. The assumption I have made is the subscription status should be 'active' and the subscription end_date should be in the future. It is seen that one of the subscription associated with user_id 3 does not satifsy the second condition - it has an end date in 2022-03-03 but is still shown as active. This is considered as a wrong / noisy data and hence excluded
 4. Are there users sending messages without an active subscription?  - Yes, user_id 6 did not have a subscription at any point, yet was seen to be sending messages
 5. Did you identified any inaccurate/noisy record that somehow could prejudice the data analyses? How to monitor it (SQL query)?:
-With respect to question 5, there is an instance of inaccurate data which is mentioned in point 3. (subscription associated with user_id 3 having an end date in the past, but status showing as 'Active'). This is considered an anomlous condition
+With respect to question 5, there is an instance of inaccurate data which is mentioned in point 3. (subscription associated with user_id 3 having an end date in the past, but status showing as 'Active'). This is considered an anomalous condition
 
 ## Monitoring views
 Data observability monitoring is an important aspect of creating robust pipelines. One of the anomalies is already explained in point 5 above. Another exapmle of anomaly is point 4, which is not exactly a problem with quality, but is still an anomaly.
