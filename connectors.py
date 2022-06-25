@@ -1,4 +1,3 @@
-from h11 import Data
 import requests
 import mysql.connector
 import time
@@ -7,7 +6,7 @@ class MySqlDbConnector:
     def __init__(self,
                  username='root', 
                  password='p@ssw0rd1',
-                 host='localhost', 
+                 host='mysqldbprod', 
                  port=3306,
 ):
         self._host = host
@@ -16,13 +15,16 @@ class MySqlDbConnector:
         self._password = password
         self._db_conn = None
 
-    def _initialise_db_connection(self, database=None):
+    def _initialise_db_connection(self, 
+                                  database=None,
+                                  max_retries=10, 
+                                  log_success=False,
+                                  exit_if_unavailable=False):
         """
         Convenience method to be set up a connection to the database.
         """
         if self._db_conn:
             return True
-        max_retries = 10
         tries = 0
 
         conn_args = {'host': self._host,
@@ -42,20 +44,28 @@ class MySqlDbConnector:
                 time.sleep(3)
                 continue
             if db_conn:
-                print('Successfully connected to database!')
+                if log_success:
+                    print('Successfully connected to database!')
                 break
         
         if not db_conn:
-            return False
-    
+            print('Unable to connect to database after multiple attempts!')
+            if exit_if_unavailable:
+                print('Exiting program!')
+                exit(1)
+        
         self._db_conn = db_conn
-        return True
 
     def _close_db_connection(self):
         if self._db_conn:
             self._db_conn.close()
             self._db_conn = None
-        return
+
+    def check_db_availability(self):
+        print('Attempting to connect to database server')
+        self._initialise_db_connection(max_retries=20, log_success=True, exit_if_unavailable=True)
+        self._close_db_connection()
+
 
     @staticmethod
     def _generate_insert_statement(record, table_name):
@@ -115,24 +125,8 @@ class MySqlDbConnector:
 
         return fields, values
     
-    # def _get_or_create_id(self, table_name, record_dict):
-    #     _ , records = self.fetch_records(table_name, ['id'], record_dict)
-    #     if not records:
-    #         # do something
-    #         query = f'SELECT MAX(id) FROM {table_name} '
-    #         query_result = self.run_query(query, return_results=True)
-    #         max_id = query_result[0][0]
-    #         id = int(max_id) + 1
-    #     else:
-    #         if len(records) > 1:
-    #             print('Error: Multiple IDs found for the given constraint!!')
-    #             return None
-    #         id = records[0][0]
-    #     return id
-    
     def _get_or_create_mask_id(self, table_name, record, database='spark_dwh'):
-        # if table_name not in ['']:
-        #     raise error
+
         _, result = self.fetch_records(table_name, ['id'], record, database=database)
         if not result:
             self.insert_record(table_name, record)
@@ -166,32 +160,38 @@ class MySqlDbConnector:
                         city_id VARCHAR(255), country VARCHAR(255), zipcode_id VARCHAR(255), 
                         email VARCHAR(255), birth_date VARCHAR(255),
                         gender VARCHAR(10), is_smoking VARCHAR(255), profession_id VARCHAR(255),
-                        income VARCHAR(255))""", database='spark_dwh', close_conn_after_exec=True
+                        income VARCHAR(255), last_updated_at VARCHAR(255))""", 
+                        database='spark_dwh', close_conn_after_exec=True
         )
 
         self.run_query(query="""CREATE TABLE IF NOT EXISTS subscriptions_raw
-                        (created_at VARCHAR(255), start_date VARCHAR(255),
+                        (user_id VARCHAR(255), created_at VARCHAR(255), start_date VARCHAR(255),
                         end_date VARCHAR(255), status VARCHAR(255),
-                        amount VARCHAR(255))""", database='spark_dwh', close_conn_after_exec=True
+                        amount VARCHAR(255), last_updated_at VARCHAR(255))""", 
+                        database='spark_dwh', close_conn_after_exec=True
         )
         
         self.run_query(query="""CREATE TABLE IF NOT EXISTS messages_raw
                         (created_at VARCHAR(255), receiver_id VARCHAR(255), 
-                        id VARCHAR(255), sender_id VARCHAR(255))""", database='spark_dwh', close_conn_after_exec=True
+                        id VARCHAR(255), sender_id VARCHAR(255), last_updated_at VARCHAR(255))""",
+                        database='spark_dwh', close_conn_after_exec=True
         )
 
         self.run_query(query="""CREATE TABLE IF NOT EXISTS sensitive_zipcode_ids
-                        (id INT AUTO_INCREMENT, zipcode VARCHAR(255), PRIMARY KEY (id))""", 
+                        (id INT AUTO_INCREMENT, zipcode VARCHAR(255),last_updated_at VARCHAR(255),
+                        PRIMARY KEY (id))""", 
                         database='spark_dwh', close_conn_after_exec=True
         )
 
         self.run_query(query="""CREATE TABLE IF NOT EXISTS sensitive_city_ids
-                        (id INT AUTO_INCREMENT, city VARCHAR(255), PRIMARY KEY (id))""", 
+                        (id INT AUTO_INCREMENT, city VARCHAR(255), last_updated_at VARCHAR(255),
+                         PRIMARY KEY (id))""", 
                         database='spark_dwh', close_conn_after_exec=True
         )
 
         self.run_query(query="""CREATE TABLE IF NOT EXISTS sensitive_profession_ids
-                        (id INT AUTO_INCREMENT, profession VARCHAR(255), PRIMARY KEY (id))""", 
+                        (id INT AUTO_INCREMENT, profession VARCHAR(255), 
+                         last_updated_at VARCHAR(255), PRIMARY KEY (id))""", 
                         database='spark_dwh', close_conn_after_exec=True
         )
         
@@ -204,16 +204,15 @@ class MySqlDbConnector:
         self._close_db_connection()
 
         print('database initialized!')
-        return True
 
 
-    
     def insert_record(self, table_name, record, fail_if_exists=True, database='spark_dwh'):
         if fail_if_exists:
             # check if record exists:
+            constraints_dict = {k: v for k,v in record.items() if k != 'last_updated_at'}
             _, result = self.fetch_records(table_name=table_name, 
                                            fields=record.keys(), 
-                                           constraints_dict=record,
+                                           constraints_dict=constraints_dict,
                                            database=database)
             if result:
                 print('Record already exists in database! Skipping insert')
@@ -223,10 +222,12 @@ class MySqlDbConnector:
 
         self.run_query(sql_query, database=database)
         self._db_conn.commit()
-        return True
+    
+    def create_view(self, view_name, sql_query):
+        query = f'CREATE OR REPLACE VIEW  {view_name} AS (' + sql_query + ');'
+        self.run_query(query=query)
 
-
-
+        
 
 class SparkApiConnector:
     def __init__(self, headers=None):
