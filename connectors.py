@@ -1,9 +1,9 @@
 """
-This module defines the connectors required to interact with the API as well as 
+This module defines the connectors required to interact with the API as well as
 the database. In particular, this file defines two classes -
--  the SparkApiConnector for interacting with the API end points and fetch 
+-  the SparkApiConnector for interacting with the API end points and fetch
    relevant data
-- the MysqlDbConnector for interacting with the MySQL database within which 
+- the MysqlDbConnector for interacting with the MySQL database within which
    all the data fetched from the API will be stored.
 """
 import time
@@ -25,9 +25,9 @@ class MySqlDbConnector:
 
     """
     def __init__(self,
-                 username='root', 
+                 username='root',
                  password='p@ssw0rd1',
-                 host='mysqldbprod', 
+                 host='mysqldbprod',
                  port=3306,
 ):
         self._host = host
@@ -244,80 +244,130 @@ class MySqlDbConnector:
         return id
 
     def initialise_db_and_create_tables(self, drop_if_exists=False):
+        """
+        Method to initialise the database and create required tables at the 
+        start of the ETL process. This method will be called in the main ETL
+        process as a root user, and hence all necessary initial set up will be
+        executed. Following steps are done
+        1) Create database spark_dwh
+        2) Create tables for users, messages, subscriptions and also the tables
+           for storing sensitive PII information 
+        3) Create a new database user having access to only non-sensitive tables
+           (non-PII related tables). This user account will be providded to the 
+           analysts 
+        """
         if drop_if_exists:
             print('dropping existing database and associated tables & users!')
-            self._run_query(query='DROP TABLE IF EXISTS users_raw', close_conn_after_exec=True)
-            self._run_query(query='DROP TABLE IF EXISTS subscriptions_raw', close_conn_after_exec=True)
-            self._run_query(query='DROP TABLE IF EXISTS messages_raw', close_conn_after_exec=True)
-            self._run_query(query='DROP TABLE IF EXISTS sensitive_zipcode_ids', close_conn_after_exec=True)
-            self._run_query(query='DROP TABLE IF EXISTS sensitive_city_ids', close_conn_after_exec=True)
-            self._run_query(query='DROP TABLE IF EXISTS sensitive_profession_ids', close_conn_after_exec=True)
-            self._run_query(query='DROP TABLE IF EXISTS spark_dwh', close_conn_after_exec=True)
-            self._run_query(query='DROP USER IF EXISTS analyst', close_conn_after_exec=True)
-            self._run_query(query='DROP DATABASE IF EXISTS spark_dwh', database=None, close_conn_after_exec=True)
+            self._run_query(query='DROP TABLE IF EXISTS users_raw',
+                            close_conn_after_exec=True)
+            self._run_query(query='DROP TABLE IF EXISTS subscriptions_raw',
+                            close_conn_after_exec=True)
+            self._run_query(query='DROP TABLE IF EXISTS messages_raw', 
+                            close_conn_after_exec=True)
+            self._run_query(query='DROP TABLE IF EXISTS sensitive_zipcode_ids', 
+                            close_conn_after_exec=True)
+            self._run_query(query='DROP TABLE IF EXISTS sensitive_city_ids', 
+                            close_conn_after_exec=True)
+            self._run_query(query='DROP TABLE IF EXISTS sensitive_profession_ids', 
+                            close_conn_after_exec=True)
+            self._run_query(query='DROP TABLE IF EXISTS spark_dwh', 
+                            close_conn_after_exec=True)
+            self._run_query(query='DROP USER IF EXISTS analyst', 
+                            close_conn_after_exec=True)
+            self._run_query(query='DROP DATABASE IF EXISTS spark_dwh', 
+                            database=None, 
+                            close_conn_after_exec=True)
 
-        if not self._username == 'root':
+        if self._username != 'root':
             print('DB initialisation can be done only as root user!')
             return False
         
         self._initialise_db_connection()
-        self._run_query(query='CREATE DATABASE IF NOT EXISTS spark_dwh', close_conn_after_exec=True)
+        self._run_query(query='CREATE DATABASE IF NOT EXISTS spark_dwh',
+                        close_conn_after_exec=True)
 
         self._run_query(query="""CREATE TABLE IF NOT EXISTS users_raw
-                        (user_id VARCHAR(255), created_at VARCHAR(255), updated_at VARCHAR(255), 
-                        city_id VARCHAR(255), country VARCHAR(255), zipcode_id VARCHAR(255), 
-                        email VARCHAR(255), birth_date VARCHAR(255),
-                        gender VARCHAR(10), is_smoking VARCHAR(255), profession_id VARCHAR(255),
-                        income VARCHAR(255), last_updated_at VARCHAR(255))""", 
-                        database='spark_dwh', close_conn_after_exec=True
+                        (user_id VARCHAR(255), created_at VARCHAR(255),
+                         updated_at VARCHAR(255), city_id VARCHAR(255), 
+                         country VARCHAR(255), zipcode_id VARCHAR(255), 
+                         email VARCHAR(255), birth_date VARCHAR(255),
+                        gender VARCHAR(10), is_smoking VARCHAR(255), 
+                        profession_id VARCHAR(255), income VARCHAR(255), 
+                        last_updated_at VARCHAR(255))""", 
+                        database='spark_dwh', 
+                        close_conn_after_exec=True
         )
 
         self._run_query(query="""CREATE TABLE IF NOT EXISTS subscriptions_raw
-                        (user_id VARCHAR(255), created_at VARCHAR(255), start_date VARCHAR(255),
-                        end_date VARCHAR(255), status VARCHAR(255),
-                        amount VARCHAR(255), last_updated_at VARCHAR(255))""", 
-                        database='spark_dwh', close_conn_after_exec=True
+                        (user_id VARCHAR(255), created_at VARCHAR(255), 
+                         start_date VARCHAR(255), end_date VARCHAR(255),
+                         status VARCHAR(255), amount VARCHAR(255), 
+                         last_updated_at VARCHAR(255))""", 
+                        database='spark_dwh', 
+                        close_conn_after_exec=True
         )
         
         self._run_query(query="""CREATE TABLE IF NOT EXISTS messages_raw
                         (created_at VARCHAR(255), receiver_id VARCHAR(255), 
-                        id VARCHAR(255), sender_id VARCHAR(255), last_updated_at VARCHAR(255))""",
-                        database='spark_dwh', close_conn_after_exec=True
+                        id VARCHAR(255), sender_id VARCHAR(255), 
+                        last_updated_at VARCHAR(255))""",
+                        database='spark_dwh', 
+                        close_conn_after_exec=True
         )
 
         self._run_query(query="""CREATE TABLE IF NOT EXISTS sensitive_zipcode_ids
-                        (id INT AUTO_INCREMENT, zipcode VARCHAR(255),last_updated_at VARCHAR(255),
-                        PRIMARY KEY (id))""", 
-                        database='spark_dwh', close_conn_after_exec=True
+                        (id INT AUTO_INCREMENT, zipcode VARCHAR(255),
+                        last_updated_at VARCHAR(255), PRIMARY KEY (id))""",
+                        database='spark_dwh',
+                        close_conn_after_exec=True
         )
 
         self._run_query(query="""CREATE TABLE IF NOT EXISTS sensitive_city_ids
-                        (id INT AUTO_INCREMENT, city VARCHAR(255), last_updated_at VARCHAR(255),
-                         PRIMARY KEY (id))""", 
-                        database='spark_dwh', close_conn_after_exec=True
+                        (id INT AUTO_INCREMENT, city VARCHAR(255), 
+                         last_updated_at VARCHAR(255), PRIMARY KEY (id))""",
+                        database='spark_dwh',
+                        close_conn_after_exec=True
         )
 
         self._run_query(query="""CREATE TABLE IF NOT EXISTS sensitive_profession_ids
                         (id INT AUTO_INCREMENT, profession VARCHAR(255), 
                          last_updated_at VARCHAR(255), PRIMARY KEY (id))""", 
-                        database='spark_dwh', close_conn_after_exec=True
+                        database='spark_dwh',
+                        close_conn_after_exec=True
         )
         
-        self._run_query(query="""CREATE USER IF NOT EXISTS 'analyst' IDENTIFIED BY 'password'""")
-        self._run_query(query="""GRANT ALL PRIVILEGES ON spark_dwh.users_raw to 'analyst'""")
-        self._run_query(query="""GRANT ALL PRIVILEGES ON spark_dwh.subscriptions_raw to 'analyst'""")
-        self._run_query(query="""GRANT ALL PRIVILEGES ON spark_dwh.messages_raw to 'analyst'""")
+        self._run_query(query="""CREATE USER IF NOT EXISTS 'analyst' 
+                                 IDENTIFIED BY 'password'""")
+        self._run_query(query="""GRANT ALL PRIVILEGES ON 
+                                 spark_dwh.users_raw to 'analyst'""")
+        self._run_query(query="""GRANT ALL PRIVILEGES ON 
+                                 spark_dwh.subscriptions_raw to 'analyst'""")
+        self._run_query(query="""GRANT ALL PRIVILEGES ON
+                                 spark_dwh.messages_raw to 'analyst'""")
 
-        
         self._close_db_connection()
 
         print('database initialized!')
 
 
-    def insert_record(self, table_name, record, fail_if_exists=True, database='spark_dwh'):
+    def insert_record(self,
+                      table_name,
+                      record,
+                      fail_if_exists=True,
+                      database='spark_dwh'):
+        """
+        Method to insert a record to a database table. 
+        
+        :param table_name: The name of the table to insert the record to.
+        :param record: The record to insert as a dictionary.
+        :param fail_if_exits: Check if the record already exists in the table
+                              and fail if found.
+        :param database: The name of the database in which the table resides.
+        """
         if fail_if_exists:
             # check if record exists:
-            constraints_dict = {k: v for k,v in record.items() if k != 'last_updated_at'}
+            constraints_dict = {k: v for k,v in record.items() 
+                                if k != 'last_updated_at'}
             _, result = self.fetch_records(table_name=table_name, 
                                            fields=record.keys(), 
                                            constraints_dict=constraints_dict,
@@ -332,18 +382,38 @@ class MySqlDbConnector:
         self._db_conn.commit()
     
     def create_view(self, view_name, sql_query):
+        """
+        Method to create a view by passing the SQL query for creating the same.
+        
+        :param view_name: The name of the view to be created.
+        :param sql_query: The query to be used for creating the view.
+        """
         query = f'CREATE OR REPLACE VIEW  {view_name} AS (' + sql_query + ');'
         self._run_query(query=query)
 
         
 
 class SparkApiConnector:
+    """
+    This class is used to create a connector object that is useful for
+    interacting with the API end points. In particular, this class provides
+    following functionalities via the its public methods:
+    - Fetch user, messages and subscription data as JSON files from the
+      corresponding API end point.
+    """
     def __init__(self, headers=None):
         self._headers = headers
 
     @staticmethod
     def _check_api_reponse(response, error_log_message):
-        
+        """
+        Convenience method to check the status of response recieved from the 
+        API.
+
+        :param response: The API response object.
+        :param error_log_message: The log message to print if the status of
+                                  response received is not 200.
+        """
         if response.status_code != 200:
             print(error_log_message)
             print(f'Status code of API response is : {response.status_code}')
@@ -351,27 +421,46 @@ class SparkApiConnector:
         return True
         
     def _fetch_data(self, end_point):
+        """
+        Convenience method to fetch data from an API end point.
+
+        :param end_point: The end point from which to receive the API response.
+        """
         try:
             response = requests.get(end_point, headers=self._headers)
         except Exception as err:
-            print(f'Failed to fetch data from endpoint {end_point} due to reason below:')
+            print(f'''Failed to fetch data from endpoint
+                  {end_point} due to reason below:''')
             print(err)
             print(f'HTTP response status code is {response.status_code}')
             return []
-        
-        if not self._check_api_reponse(response=response, 
-                                       error_log_message="Failed to fetch data from specified end point"):
+  
+        if not self._check_api_reponse(response=response,
+                                       error_log_message="""Failed to fetch
+                                       data from specified end point"""):
             return []
 
         return response.json()
-    
+
     def fetch_user_data(self, end_point=None):
+        """
+        Method to fetch data from the users API end point.
+
+        :param end_point: Use this parameter if required to change the default 
+                          endpoint.
+        """
         if not end_point:
             end_point = 'https://619ca0ea68ebaa001753c9b0.mockapi.io/evaluation/dataengineer/jr/v1/users'
         
         return self._fetch_data(end_point=end_point)
 
     def fetch_messages_data(self, end_point=None):
+        """
+        Method to fetch data from the messages API end point.
+
+        :param end_point: Use this parameter if required to change the default 
+                          endpoint.
+        """
         if not end_point:
             end_point = 'https://619ca0ea68ebaa001753c9b0.mockapi.io/evaluation/dataengineer/jr/v1/messages'
         
