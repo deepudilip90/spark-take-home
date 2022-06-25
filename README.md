@@ -4,6 +4,10 @@ This project creates a data pipeline that
  - Sanitises the data to remove PII information
  - Ingests the data to a MySQL database.
 
+## Running the entire pipeline
+The project and the ETL script can be run using the following command:
+  _"docker compose run app"_
+
 Following are the basic components of this project
 - A python script (etl.py) to run the main ETL process. This script fetches the data from the API using an API connector object (details below), performs data sanitisation for PII data removal and then writes the data to appropriate database tables in a MySQL database (created within a docker container) using a database connector object (details below)
 - A docker file and docker compose file to set up the required services (MySQL database) and run the etl.py script
@@ -11,9 +15,6 @@ Following are the basic components of this project
 The diagram below gives an outline of the data flow:
 
 ![alt text](https://github.com/deepudilip90/spark-take-home/blob/main/Data-Flow.png?raw=true)
-
-The project and the ETL script can be run using the following command:
-  _"docker compose run app"_
 
 The rest of this readme explains the flow of the ETL process with detailed descriptions of each step
 
