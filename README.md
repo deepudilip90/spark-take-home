@@ -3,12 +3,20 @@ This project creates a data pipeline that
  - Fetches data regarding users and messages from the API end points specified in the task instructions
  - Sanitises the data to remove PII information
  - Ingests the data to a MySQL database.
+ - Creates some views for monitoring data anomalies inside the database
 
 ## Running the entire pipeline
 The project and the ETL script can be run using the following command:
   _"**docker compose run app**"_
   
-Once the above command is run, the etl.py script will initialise a database by the name 'spark_dwh', created appropriate tables and user accounts (details described below), and loads the data into the tables (PII is handled as well). Until the container is stopped, the database can be accessible at the address **localhost:3306** using the following credentials - **username: 'analyst', password: 'password'**. Note that the above credentials do not give access to any of the sensitive data tables! A detailed description of the pipeline and the associated components are given below!
+Once the above command is run, docker will initialise a MySQL service, and also execute the  etl.py script. The etl.py script will initialise a database by the name 'spark_dwh' within the MySQL server, then create appropriate tables and user accounts (details described below), and loads the data into the tables (PII is handled as well). Until the container is stopped, the database can be accessed at the address **localhost:3306** using the following credentials - **username: 'analyst', password: 'password'**. Note that the above credentials do not give access to any of the sensitive data tables! A detailed description of the pipeline and the associated components are given below!
+
+Once the above command is run, docker will initialise a MySQL service, and also execute the  etl.py script. The etl.py script will initialise a database by the name 'spark_dwh' within the MySQL server, then create appropriate tables and user accounts (details described below), and loads the data into the tables (PII is handled as well). Until the container is stopped, the database can be accessed at the address **localhost:3306** using the following credentials - **username: 'analyst', password: 'password'**. Note that the above credentials do not give access to any of the sensitive data tables! A detailed description of the pipeline and the associated components are given below
+
+## Important note while running!!
+- I ran the above docker configuration using an M1 mac, hence had to add the line 'platform: linux/amd64' in the docker-compose.yml file. This might have to be altered when running on a different machine.
+- During the inital run, it takes some time for the MySQL service to be up, and somehow I have not yet been able to figure out how to make the execution of etl.py script to wait until then. As a work around, I am using a method to repeatedly try to connect to the database at the beginning of the script (max 20 times, with a time delay between each successive try), using the method  _db_connector.check_db_availability()_. In my experience, the attempts fails during the initial few tries (this will be printed in the console), but after a few successive tries, the connection will be established and the rest of the script proceeds to execute. In case it doesn't connect even after 20 successive tries, try increasing the value of max_retries in the method call _db_connector.check_db_availability()_
+
 
 Following are the basic components of this project
 - A python script (etl.py) to run the main ETL process. This script fetches the data from the API using an API connector object (details below), performs data sanitisation for PII data removal and then writes the data to appropriate database tables in a MySQL database (created within a docker container) using a database connector object (details below)
@@ -72,6 +80,33 @@ Following are my comments regarding each of the questions
 4. Are there users sending messages without an active subscription?  - Yes, user_id 6 did not have a subscription at any point, yet was seen to be sending messages
 5. Did you identified any inaccurate/noisy record that somehow could prejudice the data analyses? How to monitor it (SQL query)?:
 With respect to question 5, there is an instance of inaccurate data which is mentioned in point 3. (subscription associated with user_id 3 having an end date in the past, but status showing as 'Active'). This is considered an anomlous condition
-## monitoring views
+
+## Monitoring views
 Data observability monitoring is an important aspect of creating robust pipelines. One of the anomalies is already explained in point 5 above. Another exapmle of anomaly is point 4, which is not exactly a problem with quality, but is still an anomaly.
 Hence the last step of the ETL script is to create two views that helps monitor instances of the above 2 anomalies. These monitoring queries are stored in the path sql_queries/monitoring. Each file inside this folder is a monitoring query. The ETL process, (etl.py) at the very end creates views in the database based on each of these queries, so that we can directly ping the views for monitoring such anomalies
+
+## Developer documentation
+This section provides a high level overview of the different code modules and classes. Detailed information is provided via docstrings within the code. 
+Apart from the docker related files, there are 3 modules - connectors.py, load.py, transform.py
+
+### connectors.py 
+Defines two classes MySqlDbConnector and SparkApiConnector for interacting with the database and API respectively. The class MySqlDbconnector provides public methods for the following:
+    - Insert records to a table in the database
+    - Fetch records from a table in a database based on certain constraints
+    - Write sensitive PII information in the database within access restricted
+      tables, and create masking IDs for the same.
+      The masking IDs will be later made public to external users.
+    - Create a view within the database based on a user specified query
+    - Check if database service is up and running
+ The class SparkApiConnector provides public method for the following:
+    - Fetch user, messages and subscription data as JSON files from the
+      corresponding API end point.
+
+### load.py
+This module provides functions to insert the users, subscriptions and messages data into the database. These functions only handle the insertions - the transformation and PII handling is done using functions in the module transform.py
+
+### transform.py
+This module contains the functions to do some cleaning and transformations of the raw data obtained from the API. 
+In particular the functions to handle PII (masking / removal) is done with functions in this module.
+
+
