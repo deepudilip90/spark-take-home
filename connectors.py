@@ -1,8 +1,29 @@
+"""
+This module defines the connectors required to interact with the API as well as 
+the database. In particular, this file defines two classes -
+-  the SparkApiConnector for interacting with the API end points and fetch 
+   relevant data
+- the MysqlDbConnector for interacting with the MySQL database within which 
+   all the data fetched from the API will be stored.
+"""
+import time
 import requests
 import mysql.connector
-import time
+
 
 class MySqlDbConnector:
+    """
+    This class is used to create a connector object that is useful for
+    interacting with the database. In particular, this class provides
+    following functionalities via the its public methods:
+    - Insert records to a table in the database
+    - Fetch records from a table in a database based on certain constraints
+    - Write sensitive PII information in the database within access restricted
+      tables, and create masking IDs for the same.
+      The masking IDs will be later made public to external users.
+    - Create a view within the database based on a user specified query
+
+    """
     def __init__(self,
                  username='root', 
                  password='p@ssw0rd1',
@@ -22,6 +43,17 @@ class MySqlDbConnector:
                                   exit_if_unavailable=False):
         """
         Convenience method to be set up a connection to the database.
+
+        :param database: The name of the database to which the connection is to
+                         be set up. If not provided, a generic conenction to 
+                         server is created.
+        :param max_retries: The number of times to attempt to connect to the 
+                            database before declaring failure
+        :param log_sucess: Bool value to print a log message if the database
+                           connection could be successfully established.
+        :param exit_if_unavailable: Flag to indicate whether to quit the 
+                                    calling program if database cannot be 
+                                    connected to
         """
         if self._db_conn:
             return True
@@ -57,27 +89,55 @@ class MySqlDbConnector:
         self._db_conn = db_conn
 
     def _close_db_connection(self):
+        """
+        Convenience method to close the existing database connection.
+        """
         if self._db_conn:
             self._db_conn.close()
             self._db_conn = None
 
     def check_db_availability(self):
+        """
+        Method to check if the database is available and can be connected to.
+        This is especially required when running apps via docker compose, since
+        MySQL server takes some time to start up, and sometimes the python 
+        script does not wait for the service to be up before beginnig execution.
+        """
         print('Attempting to connect to database server')
-        self._initialise_db_connection(max_retries=20, log_success=True, exit_if_unavailable=True)
+        self._initialise_db_connection(max_retries=20, 
+                                       log_success=True, 
+                                       exit_if_unavailable=True)
         self._close_db_connection()
 
 
     @staticmethod
     def _generate_insert_statement(record, table_name):
-         field_string = ', '.join([str(key) for key in record.keys()])
-         value_string = '", "'.join([value for _, value in record.items()])
-         insert_string = (f'INSERT INTO {table_name} (' + 
+
+        """
+        Generate a SQL insert query for a given record and a table name
+
+        :param record: The record to be inserted to the table.
+        :param table_name: The name of the table to insert the record to.
+        """
+
+        field_string = ', '.join([str(key) for key in record.keys()])
+        value_string = '", "'.join([value for _, value in record.items()])
+        insert_string = (f'INSERT INTO {table_name} (' + 
                                field_string + ') VALUES ("' + 
                                value_string + '");')
-         return insert_string
+        return insert_string
 
     @staticmethod
     def _generate_constraint_statement(record):
+        """
+        Generate a 'WHERE' constraint clause for an SQL query based on values
+        specified in a dictionary. By default, all key-values in the dictionary
+        are combined using an 'AND' condition for creating the constraint
+        statement.
+
+        :param record: The dictionary of key-value pairs specifying the
+                       constraint condition.
+        """
         condition_list = []
         for key, value in record.items():
             if isinstance(value, str):
@@ -89,7 +149,22 @@ class MySqlDbConnector:
         constraint_statement = 'WHERE ' + ' AND '.join(condition_list)
         return constraint_statement
    
-    def run_query(self, query, close_conn_after_exec=False, return_results=False, database='spark_dwh'):
+    def _run_query(self,
+                   query, 
+                   close_conn_after_exec=False, 
+                   return_results=False, 
+                   database='spark_dwh'):
+        """
+        Method to execute and SQL query inside the database.
+
+        :param query: The query to execute.
+        :param close_conn_after_exec: Bool to specify if the database connection
+                                      should be closed after executing the 
+                                      query.
+        :param return_results: Bool to specify if a resulting set of records
+                               are expected after running the query.
+        :param database: The name of the database on which to execute the query.
+        """
         self._initialise_db_connection(database=database)
         cursor = self._db_conn.cursor()
         cursor.execute(query)
@@ -105,7 +180,21 @@ class MySqlDbConnector:
         
         return results
 
-    def fetch_records(self, table_name, fields=None, constraints_dict=None, database='spark_dwh'):
+    def fetch_records(self,
+                      table_name, 
+                      fields=None, 
+                      constraints_dict=None,
+                      database='spark_dwh'):
+        """
+        Method to fetch a list of records from a database table based on a
+        specified set of constraints.
+
+        :param table_name: The name of the table from which to fetch the records.
+        :param fields: The columns to retrieve from the table.
+        :param constraints_dict: A dictionary specifying the constraints to be
+                                 used when fetching the records.
+        :param database: The name of the database where the table is located.
+        """
         self._initialise_db_connection(database=database)
         cursor = self._db_conn.cursor()
         if fields:
@@ -125,9 +214,16 @@ class MySqlDbConnector:
 
         return fields, values
     
-    def _get_or_create_mask_id(self, table_name, record, database='spark_dwh'):
+    def get_or_create_mask_id(self, table_name, record, database='spark_dwh'):
+        if self._username != 'root':
+            print("""Warning: This method requires permissions to access to
+                     tables only root / service users! """)
+            return None
 
-        _, result = self.fetch_records(table_name, ['id'], record, database=database)
+        _, result = self.fetch_records(table_name, 
+                                      ['id'], 
+                                       record, 
+                                       database=database)
         if not result:
             self.insert_record(table_name, record)
             _, result = self.fetch_records(table_name, ['id'], record, database=database)
@@ -138,24 +234,24 @@ class MySqlDbConnector:
     def initialise_db_and_create_tables(self, drop_if_exists=False):
         if drop_if_exists:
             print('dropping existing database and associated tables & users!')
-            self.run_query(query='DROP TABLE IF EXISTS users_raw', close_conn_after_exec=True)
-            self.run_query(query='DROP TABLE IF EXISTS subscriptions_raw', close_conn_after_exec=True)
-            self.run_query(query='DROP TABLE IF EXISTS messages_raw', close_conn_after_exec=True)
-            self.run_query(query='DROP TABLE IF EXISTS sensitive_zipcode_ids', close_conn_after_exec=True)
-            self.run_query(query='DROP TABLE IF EXISTS sensitive_city_ids', close_conn_after_exec=True)
-            self.run_query(query='DROP TABLE IF EXISTS sensitive_profession_ids', close_conn_after_exec=True)
-            self.run_query(query='DROP TABLE IF EXISTS spark_dwh', close_conn_after_exec=True)
-            self.run_query(query='DROP USER IF EXISTS analyst', close_conn_after_exec=True)
-            self.run_query(query='DROP DATABASE IF EXISTS spark_dwh', database=None, close_conn_after_exec=True)
+            self._run_query(query='DROP TABLE IF EXISTS users_raw', close_conn_after_exec=True)
+            self._run_query(query='DROP TABLE IF EXISTS subscriptions_raw', close_conn_after_exec=True)
+            self._run_query(query='DROP TABLE IF EXISTS messages_raw', close_conn_after_exec=True)
+            self._run_query(query='DROP TABLE IF EXISTS sensitive_zipcode_ids', close_conn_after_exec=True)
+            self._run_query(query='DROP TABLE IF EXISTS sensitive_city_ids', close_conn_after_exec=True)
+            self._run_query(query='DROP TABLE IF EXISTS sensitive_profession_ids', close_conn_after_exec=True)
+            self._run_query(query='DROP TABLE IF EXISTS spark_dwh', close_conn_after_exec=True)
+            self._run_query(query='DROP USER IF EXISTS analyst', close_conn_after_exec=True)
+            self._run_query(query='DROP DATABASE IF EXISTS spark_dwh', database=None, close_conn_after_exec=True)
 
         if not self._username == 'root':
             print('DB initialisation can be done only as root user!')
             return False
         
         self._initialise_db_connection()
-        self.run_query(query='CREATE DATABASE IF NOT EXISTS spark_dwh', close_conn_after_exec=True)
+        self._run_query(query='CREATE DATABASE IF NOT EXISTS spark_dwh', close_conn_after_exec=True)
 
-        self.run_query(query="""CREATE TABLE IF NOT EXISTS users_raw
+        self._run_query(query="""CREATE TABLE IF NOT EXISTS users_raw
                         (user_id VARCHAR(255), created_at VARCHAR(255), updated_at VARCHAR(255), 
                         city_id VARCHAR(255), country VARCHAR(255), zipcode_id VARCHAR(255), 
                         email VARCHAR(255), birth_date VARCHAR(255),
@@ -164,41 +260,41 @@ class MySqlDbConnector:
                         database='spark_dwh', close_conn_after_exec=True
         )
 
-        self.run_query(query="""CREATE TABLE IF NOT EXISTS subscriptions_raw
+        self._run_query(query="""CREATE TABLE IF NOT EXISTS subscriptions_raw
                         (user_id VARCHAR(255), created_at VARCHAR(255), start_date VARCHAR(255),
                         end_date VARCHAR(255), status VARCHAR(255),
                         amount VARCHAR(255), last_updated_at VARCHAR(255))""", 
                         database='spark_dwh', close_conn_after_exec=True
         )
         
-        self.run_query(query="""CREATE TABLE IF NOT EXISTS messages_raw
+        self._run_query(query="""CREATE TABLE IF NOT EXISTS messages_raw
                         (created_at VARCHAR(255), receiver_id VARCHAR(255), 
                         id VARCHAR(255), sender_id VARCHAR(255), last_updated_at VARCHAR(255))""",
                         database='spark_dwh', close_conn_after_exec=True
         )
 
-        self.run_query(query="""CREATE TABLE IF NOT EXISTS sensitive_zipcode_ids
+        self._run_query(query="""CREATE TABLE IF NOT EXISTS sensitive_zipcode_ids
                         (id INT AUTO_INCREMENT, zipcode VARCHAR(255),last_updated_at VARCHAR(255),
                         PRIMARY KEY (id))""", 
                         database='spark_dwh', close_conn_after_exec=True
         )
 
-        self.run_query(query="""CREATE TABLE IF NOT EXISTS sensitive_city_ids
+        self._run_query(query="""CREATE TABLE IF NOT EXISTS sensitive_city_ids
                         (id INT AUTO_INCREMENT, city VARCHAR(255), last_updated_at VARCHAR(255),
                          PRIMARY KEY (id))""", 
                         database='spark_dwh', close_conn_after_exec=True
         )
 
-        self.run_query(query="""CREATE TABLE IF NOT EXISTS sensitive_profession_ids
+        self._run_query(query="""CREATE TABLE IF NOT EXISTS sensitive_profession_ids
                         (id INT AUTO_INCREMENT, profession VARCHAR(255), 
                          last_updated_at VARCHAR(255), PRIMARY KEY (id))""", 
                         database='spark_dwh', close_conn_after_exec=True
         )
         
-        self.run_query(query="""CREATE USER IF NOT EXISTS 'analyst' IDENTIFIED BY 'password'""")
-        self.run_query(query="""GRANT ALL PRIVILEGES ON spark_dwh.users_raw to 'analyst'""")
-        self.run_query(query="""GRANT ALL PRIVILEGES ON spark_dwh.subscriptions_raw to 'analyst'""")
-        self.run_query(query="""GRANT ALL PRIVILEGES ON spark_dwh.messages_raw to 'analyst'""")
+        self._run_query(query="""CREATE USER IF NOT EXISTS 'analyst' IDENTIFIED BY 'password'""")
+        self._run_query(query="""GRANT ALL PRIVILEGES ON spark_dwh.users_raw to 'analyst'""")
+        self._run_query(query="""GRANT ALL PRIVILEGES ON spark_dwh.subscriptions_raw to 'analyst'""")
+        self._run_query(query="""GRANT ALL PRIVILEGES ON spark_dwh.messages_raw to 'analyst'""")
 
         
         self._close_db_connection()
@@ -220,12 +316,12 @@ class MySqlDbConnector:
         sql_query = self._generate_insert_statement(record=record, 
                                                     table_name=table_name)
 
-        self.run_query(sql_query, database=database)
+        self._run_query(sql_query, database=database)
         self._db_conn.commit()
     
     def create_view(self, view_name, sql_query):
         query = f'CREATE OR REPLACE VIEW  {view_name} AS (' + sql_query + ');'
-        self.run_query(query=query)
+        self._run_query(query=query)
 
         
 

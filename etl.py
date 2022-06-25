@@ -1,7 +1,14 @@
+"""
+This is the main python script for extracting data from the API, 
+cleaning, transforming the data to remove / mask PII information 
+load the data to the MySQL database.
+"""
 
 from connectors import MySqlDbConnector, SparkApiConnector
 from load import insert_message_data, insert_subscription_data, insert_user_data
-from transform import get_subscription_data, sanitize_sensitive_data_users, create_monitoring_views
+from transform import (get_subscription_data, 
+                       sanitize_sensitive_data_users, 
+                       create_monitoring_views)
 
 def etl_main():
     """
@@ -22,19 +29,25 @@ def etl_main():
     api_messages_data = api_connector.fetch_messages_data()
     api_subscription_data = get_subscription_data(api_users_data)
 
-    api_users_data = sanitize_sensitive_data_users(api_users_data)
+    api_users_data = sanitize_sensitive_data_users(api_users_data, 
+                                                   root_password='p@ssw0rd1')
     if not insert_user_data(api_users_data):
-        print('Error: One or more records could not be inserted successully in users table!')
+        print('Error: One or more records could not be inserted \
+               successully in users table!')
     if not insert_subscription_data(api_subscription_data):
-        print('Error: One or more records could not be inserted successully in subscriptions table!')
+        print('Error: One or more records could not be inserted \
+               successully in subscriptions table!')
     if not insert_message_data(api_messages_data):
-        print('Error: One or more records could not be inserted successully in messages table!')
+        print('Error: One or more records could not be inserted \
+               successully in messages table!')
 
     print('creating monitoring views..')
     create_monitoring_views()
 
-    print("""All data ingested. please login to the mysql server running at localhost:3306 for accessing the data
-             within the schame 'spark_dwh' """)
+    print("""All data ingested. please login to the mysql server running at
+             localhost:3306 for accessing the data
+             within the schame 'spark_dwh'
+    """)
 
 if __name__ == '__main__':
     etl_main()
