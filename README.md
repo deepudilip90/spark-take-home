@@ -10,7 +10,7 @@ Following are the basic components of this project
 
 The diagram below gives an outline of the data flow:
 
-![alt text](https://github.com/deepudilip90/spark-take-home/blob/main/data-flow.png?raw=true)
+![alt text](https://github.com/deepudilip90/spark-take-home/blob/main/Data-Flow.png?raw=true)
 
 The project and the ETL script can be run using the following command:
   _"docker compose run app"_
