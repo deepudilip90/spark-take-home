@@ -91,15 +91,14 @@ Apart from the docker related files, there are 3 modules - connectors.py, load.p
 
 ### connectors.py 
 Defines two classes MySqlDbConnector and SparkApiConnector for interacting with the database and API respectively. The class MySqlDbconnector provides public methods for the following:
-    - Insert records to a table in the database
-    - Fetch records from a table in a database based on certain constraints
-    - Write sensitive PII information in the database within access restricted
-      tables, and create masking IDs for the same.
-      The masking IDs will be later made public to external users.
-    - Create a view within the database based on a user specified query
-    - Check if database service is up and running
- The class SparkApiConnector provides public method for the following:
-    - Fetch user, messages and subscription data as JSON files from the
+- Insert records to a table in the database
+- Fetch records from a table in a database based on certain constraints
+- Write sensitive PII information in the database within access restricted tables, and create masking IDs for the same. The masking IDs will be later made public to external users.
+- Create a view within the database based on a user specified query
+- Check if database service is up and running 
+
+The class SparkApiConnector provides public method for the following:
+- Fetch user, messages and subscription data as JSON files from the
       corresponding API end point.
 
 ### load.py
