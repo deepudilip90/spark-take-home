@@ -215,18 +215,30 @@ class MySqlDbConnector:
         return fields, values
     
     def get_or_create_mask_id(self, table_name, record, database='spark_dwh'):
+        """
+        This method fetches a 'masking' id corresponding to record 
+        (specified as a dictionary) from the table storing all the
+        masking ids. If the record is a new entry and does not have a
+        corresponding masking ID in the table, a new masking ID will be 
+        created. At the backend, this is achieved using a table that has an 
+        auto-increment 'id' field, which creates a new ID for every new record 
+        inserted.
+        """
         if self._username != 'root':
             print("""Warning: This method requires permissions to access to
                      tables only root / service users! """)
             return None
 
-        _, result = self.fetch_records(table_name, 
-                                      ['id'], 
-                                       record, 
+        _, result = self.fetch_records(table_name,
+                                      ['id'],
+                                       record,
                                        database=database)
         if not result:
             self.insert_record(table_name, record)
-            _, result = self.fetch_records(table_name, ['id'], record, database=database)
+            _, result = self.fetch_records(table_name,
+                                           ['id'],
+                                           record,
+                                           database=database)
         id = result[0][0]
 
         return id
