@@ -469,20 +469,3 @@ class SparkApiConnector:
             end_point = 'https://619ca0ea68ebaa001753c9b0.mockapi.io/evaluation/dataengineer/jr/v1/messages'
         
         return self._fetch_data(end_point=end_point)
-        
-        
-
-if __name__ == '__main__':
-    ROOT_PASSWORD = 'p@ssw0rd1'
-    ANALYST_PASSWORD = 'password'
-    connector = MySqlDbConnector(username='root', password=ROOT_PASSWORD)
-
-    connector.initialise_db_and_create_tables()
-
-    # url = 'https://619ca0ea68ebaa001753c9b0.mockapi.io/evaluation/dataengineer/jr/v1/users'
-    # api_connector = ApiConnector()
-    # data = api_connector.fetch_data(url)
-
-
-
-    
