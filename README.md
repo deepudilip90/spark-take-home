@@ -55,7 +55,7 @@ The masking is achieved by generating an 'id' value corresponding to each unique
 
 #### Access restriction to sensitive information
 As mentioned in the same section, these sensitive tables can only be accessed by the root user, whereas the other tables are accessbile to the database user 'analyst' (which could be used analysts/ data scientists). In a real life set up, the sensitive tables can be made accessible to just a service account that executes the ETL process (rather than the root user as done in this project). The service account password to connect to the database can be stored in a secure location accessbile only to the ETL process. A few examples of such mechanism are password managers, or cloud services such as AWS secrets manager.
-In this project, < the root password is just stored within the repository itself for sake of simplicity, but in real life this will NEVER be done! Passwords are never stored in Git repostories!!>
+In this project, the root password is just stored within the repository itself for sake of simplicity, but in real life this will NEVER be done! Passwords are never stored in Git repostories! The password can be fetched from a secrets manager application during the production run.
 
 
 ## Data loading
