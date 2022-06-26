@@ -25,8 +25,8 @@ class MySqlDbConnector:
 
     """
     def __init__(self,
-                 username='root',
-                 password='p@ssw0rd1',
+                 username,
+                 password,
                  host='mysqldbprod',
                  port=3306,
 ):
@@ -73,7 +73,7 @@ class MySqlDbConnector:
                 print(f'Cannot connect to database due to error {error}. Retrying...')
                 tries += 1
                 db_conn = None
-                time.sleep(3)
+                time.sleep(5)
                 continue
             if db_conn:
                 if log_success:
@@ -96,7 +96,7 @@ class MySqlDbConnector:
             self._db_conn.close()
             self._db_conn = None
 
-    def check_db_availability(self):
+    def check_db_availability(self, max_retries=20):
         """
         Method to check if the database is available and can be connected to.
         This is especially required when running apps via docker compose, since
@@ -104,7 +104,7 @@ class MySqlDbConnector:
         script does not wait for the service to be up before beginnig execution.
         """
         print('Attempting to connect to database server')
-        self._initialise_db_connection(max_retries=20, 
+        self._initialise_db_connection(max_retries=max_retries, 
                                        log_success=True, 
                                        exit_if_unavailable=True)
         self._close_db_connection()
@@ -243,7 +243,8 @@ class MySqlDbConnector:
 
         return id
 
-    def initialise_db_and_create_tables(self, drop_if_exists=False):
+    def initialise_db_and_create_tables(self,
+                                        drop_if_exists=False):
         """
         Method to initialise the database and create required tables at the 
         start of the ETL process. This method will be called in the main ETL
@@ -256,6 +257,10 @@ class MySqlDbConnector:
            (non-PII related tables). This user account will be providded to the 
            analysts 
         """
+        if self._username != 'root':
+            print('DB initialisation can be done only as root user!')
+            return False
+        
         if drop_if_exists:
             print('dropping existing database and associated tables & users!')
             self._run_query(query='DROP TABLE IF EXISTS users_raw',
@@ -277,10 +282,6 @@ class MySqlDbConnector:
             self._run_query(query='DROP DATABASE IF EXISTS spark_dwh', 
                             database=None, 
                             close_conn_after_exec=True)
-
-        if self._username != 'root':
-            print('DB initialisation can be done only as root user!')
-            return False
         
         self._initialise_db_connection()
         self._run_query(query='CREATE DATABASE IF NOT EXISTS spark_dwh',
@@ -380,6 +381,7 @@ class MySqlDbConnector:
 
         self._run_query(sql_query, database=database)
         self._db_conn.commit()
+        self._close_db_connection()
     
     def create_view(self, view_name, sql_query):
         """
@@ -390,6 +392,8 @@ class MySqlDbConnector:
         """
         query = f'CREATE OR REPLACE VIEW  {view_name} AS (' + sql_query + ');'
         self._run_query(query=query)
+        self._run_query(query=f"""GRANT ALL PRIVILEGES ON 
+                                 {view_name} to 'analyst'""")
 
         
 

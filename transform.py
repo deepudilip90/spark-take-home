@@ -74,17 +74,21 @@ def get_subscription_data(users_data):
     
     return all_subscription_data
 
-def create_monitoring_views(query_base_path='sql_queries/monitoring'):
+def create_monitoring_views(db_user, 
+                            db_password, 
+                            query_base_path='sql_queries/monitoring'):
     """
     Create a set of views which are expected to be stored as
     .sql files in the path specified by parameter query_base_path. Each 
     file within the query_base_path is expected to be query to create a single
     monitoring view.
 
-    param query_base_path: The path to the folder containing the queries to 
+    :param db_user: The username to use when connecting to database.
+    :param db_password: The password to use when connecting to database.
+    :param query_base_path: The path to the folder containing the queries to 
                             be executed.
     """
-    db_connector = MySqlDbConnector()
+    db_connector = MySqlDbConnector(username=db_user, password=db_password)
     sql_files = glob(query_base_path + '/*')
     for file in sql_files:
         view_name = file.split('/')[-1].replace('.sql', '')

@@ -7,6 +7,8 @@ from connectors import MySqlDbConnector
 
 def _insert_data(table_name,
                  data,
+                 db_user,
+                 db_password,
                  include_update_time=True,
                  database='spark_dwh'):
     """
@@ -15,11 +17,13 @@ def _insert_data(table_name,
 
     :param table_name: The name of the table to insert the data to.
     :param data: The list of records (in the form of dictionaries) to insert.
+    :param db_user: The username to use when connecting to database.
+    :param db_password: The password to use when connecting to database.
     :param include_update_time: Flag to specify if update time is to be included
                                 while inserting the records.
     :param database: The name of the database schema in which the table is in.
     """
-    db_connector = MySqlDbConnector()
+    db_connector = MySqlDbConnector(username=db_user, password=db_password)
     total_records = len(data)
     successful_inserts = 0
     failed_inserts = 0
@@ -41,12 +45,14 @@ def _insert_data(table_name,
     print(f'total failed records {failed_inserts}')
     return failed_inserts == 0
 
-def insert_user_data(users_data):
+def insert_user_data(users_data, db_user, db_password):
     """
     Function to insert the users data coming from the API, after it has been
     sanitized to remove PII related information.
 
     :param users_data: A list of dictionaries specifiying user data records.
+    :param db_user: The username to use when connecting to database.
+    :param db_password: The password to use when connecting to database.
     """
     
     def check_if_pii_data_present(data_record):
@@ -74,15 +80,17 @@ def insert_user_data(users_data):
                        'profession_id': record.get('profile', {}).get('profession'),
                        'income': record.get('profile', {}).get('income')}
         records_to_insert.append(data_record)
-    return _insert_data('users_raw', records_to_insert)
+    return _insert_data('users_raw', records_to_insert, db_user, db_password)
     
 
-def insert_subscription_data(subscription_data):
+def insert_subscription_data(subscription_data,  db_user, db_password):
     """
     Function to insert the subscription data coming from the API.
 
     :param users_data: A list of dictionaries specifying subscriptoin
                       data records.
+    :param db_user: The username to use when connecting to database.
+    :param db_password: The password to use when connecting to database.
     """
     records_to_insert = []
     for record in subscription_data:
@@ -94,15 +102,20 @@ def insert_subscription_data(subscription_data):
                        'amount': record.get('amount')
                        }
         records_to_insert.append(data_record)
-    return _insert_data('subscriptions_raw', records_to_insert)
+    return _insert_data('subscriptions_raw',
+                         records_to_insert,  
+                         db_user, 
+                         db_password)
 
-def insert_message_data(message_data):
+def insert_message_data(message_data, db_user, db_password):
     """
     Function to insert the messages data coming from the API. The message
     text is ignored while insert as this is sensitive information.
 
     :param message_data: A list of dictionaries specifying messages
                          data records.
+    :param db_user: The username to use when connecting to database.
+    :param db_password: The password to use when connecting to database.
     """
     records_to_insert = []
     for record in message_data:
@@ -112,4 +125,4 @@ def insert_message_data(message_data):
                        'sender_id': record.get('senderId')
                        }
         records_to_insert.append(data_record)
-    return _insert_data('messages_raw', records_to_insert)
+    return _insert_data('messages_raw', records_to_insert, db_user, db_password)
